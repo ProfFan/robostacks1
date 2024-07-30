@@ -1,12 +1,11 @@
 
-#define AVATAR 1
+#define AVATAR 0
 
 #if AVATAR == 1
 #include <M5Unified.h>
 #include <Avatar.h>
 #endif
 // #include <M5Core2.h>
-#include <CAN.h>
 #include <micro_ros_arduino.h>
 
 #include <stdio.h>
@@ -25,6 +24,8 @@
 #include <geometry_msgs/msg/transform_stamped.h>
 #include <tf2_msgs/msg/tf_message.h>
 
+#include "driver/twai.h"
+
 #include "robomaster_s1.h"
 #include "command_list.h"
 
@@ -33,20 +34,18 @@
 #define MICRO_ROS_SERVER_IP "YOUR IP"
 #define MICRO_ROS_SERVER_PORT 8888
 
-#define RCCHECK(fn)              \
-  {                              \
-    rcl_ret_t temp_rc = fn;      \
-    if ((temp_rc != RCL_RET_OK)) \
-    {                            \
-      error_disp();              \
-    }                            \
+#define RCCHECK(fn) \
+  { \
+    rcl_ret_t temp_rc = fn; \
+    if ((temp_rc != RCL_RET_OK)) { \
+      error_disp(); \
+    } \
   }
-#define RCSOFTCHECK(fn)          \
-  {                              \
-    rcl_ret_t temp_rc = fn;      \
-    if ((temp_rc != RCL_RET_OK)) \
-    {                            \
-    }                            \
+#define RCSOFTCHECK(fn) \
+  { \
+    rcl_ret_t temp_rc = fn; \
+    if ((temp_rc != RCL_RET_OK)) { \
+    } \
   }
 
 
@@ -110,11 +109,11 @@ uint32_t timer100msec_counter = 0;
 
 // LED
 #define LED_LIST_NUM 4
-led led_white = {1, 255, 255, 255};
-led led_red = {1, 255, 0, 0};
-led led_green = {1, 0, 255, 0};
-led led_blue = {1, 0, 0, 255};
-led led_list[LED_LIST_NUM] = {led_white, led_red, led_green, led_blue};
+led led_white = { 1, 255, 255, 255 };
+led led_red = { 1, 255, 0, 0 };
+led led_green = { 1, 0, 255, 0 };
+led led_blue = { 1, 0, 0, 255 };
+led led_list[LED_LIST_NUM] = { led_white, led_red, led_green, led_blue };
 int led_list_count = 0;
 
 // Wheel
@@ -154,7 +153,7 @@ uint8_t update_flag_chassis3 = 0;
 uint8_t update_flag_gimbal = 0;
 
 // multi thread
-TaskHandle_t thp[1];
+TaskHandle_t thp[2];
 
 // micro-ROS
 rclc_support_t support;
@@ -186,8 +185,7 @@ std_msgs__msg__Int8 control_mode_msg;
 #define BASE_LINK "base_link"
 #define ODOM_LINK "odom"
 
-void twist_subscription_callback(const void *msgin)
-{
+void twist_subscription_callback(const void *msgin) {
   const geometry_msgs__msg__Twist *msg = (const geometry_msgs__msg__Twist *)msgin;
 
   // Deal with the twist message recieved here
@@ -201,8 +199,7 @@ void twist_subscription_callback(const void *msgin)
   command_vel_timeout_count = COMMAND_VEL_TIMEOUT;
 }
 
-void led_subscription_callback(const void *msgin)
-{
+void led_subscription_callback(const void *msgin) {
   const std_msgs__msg__ColorRGBA *msg = (const std_msgs__msg__ColorRGBA *)msgin;
 
   // Deal with the twist message recieved here
@@ -213,24 +210,20 @@ void led_subscription_callback(const void *msgin)
   command_led.enable = true;
 }
 
-void blaster_subscription_callback(const void *msgin)
-{
+void blaster_subscription_callback(const void *msgin) {
   const std_msgs__msg__Int8 *msg = (const std_msgs__msg__Int8 *)msgin;
 
   // Deal with the twist message recieved here
   // avatar.setSpeechText("Get Blaster Data...");
-  if ((int)msg->data == 1)
-  {
+  if ((int)msg->data == 1) {
     command_blaster = 1;
   }
-  if ((int)msg->data == 2)
-  {
+  if ((int)msg->data == 2) {
     command_gel_blaster = 1;
   }
 }
 
-void control_mode_subscription_callback(const void *msgin)
-{
+void control_mode_subscription_callback(const void *msgin) {
   const std_msgs__msg__Int8 *msg = (const std_msgs__msg__Int8 *)msgin;
 
   // Deal with the twist message recieved here
@@ -238,12 +231,11 @@ void control_mode_subscription_callback(const void *msgin)
 }
 
 // Multi thread core0 task
-void Core0a(void *args)
-{
+void Core0a(void *args) {
 
 #if AVATAR == 1
   M5.begin();
-  avatar.init(); // start drawing
+  avatar.init();  // start drawing
 #endif
 
   set_microros_wifi_transports(MICRO_ROS_SSID, MICRO_ROS_PASSWD, MICRO_ROS_SERVER_IP, MICRO_ROS_SERVER_PORT);
@@ -257,72 +249,72 @@ void Core0a(void *args)
 
   // create subscriber
   RCCHECK(rclc_subscription_init_default(
-      &command_vel_subscriber,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-      "/robomasters1/command/cmd_vel"));
+    &command_vel_subscriber,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
+    "/robomasters1/command/cmd_vel"));
 
   // create subscriber
   RCCHECK(rclc_subscription_init_default(
-      &command_led_subscriber,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, ColorRGBA),
-      "/robomasters1/command/led"));
+    &command_led_subscriber,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, ColorRGBA),
+    "/robomasters1/command/led"));
 
   // create subscriber
   RCCHECK(rclc_subscription_init_default(
-      &command_blaster_subscriber,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
-      "/robomasters1/command/blaster"));
+    &command_blaster_subscriber,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
+    "/robomasters1/command/blaster"));
 
   // create subscriber
   RCCHECK(rclc_subscription_init_default(
-      &command_control_mode_subscriber,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
-      "/robomasters1/command/control_mode"));
+    &command_control_mode_subscriber,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
+    "/robomasters1/command/control_mode"));
 
   // create publisher
   RCCHECK(rclc_publisher_init_default(
-      &imu_publisher,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Imu),
-      "/robomasters1/status/imu"));
+    &imu_publisher,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Imu),
+    "/robomasters1/status/imu"));
 
   // create publisher
   RCCHECK(rclc_publisher_init_default(
-      &gimbal_joint_state_publisher,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, JointState),
-      "/joint_states"));
+    &gimbal_joint_state_publisher,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, JointState),
+    "/joint_states"));
 
   // create publisher
   RCCHECK(rclc_publisher_init_default(
-      &wheel_publisher,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),
-      "/robomasters1/status/wheel"));
+    &wheel_publisher,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),
+    "/robomasters1/status/wheel"));
 
   // create publisher
   RCCHECK(rclc_publisher_init_default(
-      &chassis_info1_publisher,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),
-      "/robomasters1/status/chassis_info1"));
+    &chassis_info1_publisher,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),
+    "/robomasters1/status/chassis_info1"));
 
   // create publisher
   RCCHECK(rclc_publisher_init_default(
-      &chassis_info2_publisher,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),
-      "/robomasters1/status/chassis_info2"));
+    &chassis_info2_publisher,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),
+    "/robomasters1/status/chassis_info2"));
 
   RCCHECK(rclc_publisher_init_default(
-      &odom_tf_publisher,
-      &node,
-      ROSIDL_GET_MSG_TYPE_SUPPORT(tf2_msgs, msg, TFMessage),
-      "/tf"));
+    &odom_tf_publisher,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(tf2_msgs, msg, TFMessage),
+    "/tf"));
 
   // create executor
   RCCHECK(rclc_executor_init(&executor, &support.context, 4, &allocator));
@@ -333,12 +325,10 @@ void Core0a(void *args)
 
   int update_count_chassis2 = 0;
 
-  while (1)
-  {
+  while (1) {
     RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(0)));
 
-    if (update_flag_chassis1)
-    {
+    if (update_flag_chassis1) {
       update_flag_chassis1 = 0;
 
       // chassis_info1_msg.data.capacity = 7;
@@ -354,14 +344,12 @@ void Core0a(void *args)
       // RCSOFTCHECK(rcl_publish(&chassis_info1_publisher, &chassis_info1_msg, NULL));
       // free(chassis_info1_msg.data.data);
     }
-    if (update_flag_chassis2)
-    {
+    if (update_flag_chassis2) {
       update_flag_chassis2 = 0;
 
       update_count_chassis2++;
 
-      if (update_count_chassis2 % 50 == 0)
-      { // 1Hz
+      if (update_count_chassis2 % 50 == 0) {  // 1Hz
         update_count_chassis2 = 0;
         chassis_info2_msg.data.capacity = 5;
         chassis_info2_msg.data.data = (float *)malloc(chassis_info2_msg.data.capacity * sizeof(float));
@@ -407,8 +395,7 @@ void Core0a(void *args)
       free(odom_tf_msg.transforms.data);
     }
 
-    if (update_flag_chassis3)
-    {
+    if (update_flag_chassis3) {
       update_flag_chassis3 = 0;
 
       wheel_msg.data.capacity = 15;
@@ -454,8 +441,7 @@ void Core0a(void *args)
       free(imu_msg.header.frame_id.data);
     }
 
-    if (update_flag_gimbal)
-    {
+    if (update_flag_gimbal) {
       update_flag_gimbal = 0;
 
       gimbal_joint_state_msg.header.stamp.sec = (uint32_t)(timer10msec_counter / 100);
@@ -504,73 +490,60 @@ void Core0a(void *args)
   }
 }
 
-void IRAM_ATTR on10msecTimer()
-{
+void IRAM_ATTR on10msecTimer() {
   // 10msec Timer
   timer10msec_counter++;
   timer10msec_flag = 1;
 
   // 10sec conter
-  if (timer10msec_counter % 1000 == 0)
-  {
+  if (timer10msec_counter % 1000 == 0) {
     timer10sec_flag = 1;
   }
 
   // 1sec conter
-  if (timer10msec_counter % 100 == 0)
-  {
+  if (timer10msec_counter % 100 == 0) {
     timer1sec_flag = 1;
   }
 
   // 100msec counter
-  if (timer10msec_counter % 10 == 0)
-  {
+  if (timer10msec_counter % 10 == 0) {
     timer100msec_flag = 1;
   }
 
   command_vel_timeout_count--;
 
-  if (command_vel_timeout_count == 0)
-  {
+  if (command_vel_timeout_count == 0) {
     command_vel.enable = false;
     command_vel_timeout_count = 1;
   }
 
   robomasters1_can_timeout_count--;
-  if (robomasters1_can_timeout_count == 0)
-  {
+  if (robomasters1_can_timeout_count == 0) {
     robomasters1_can_timeout_count = 1;
     robomasters1_can_timeout = 1;
   }
 }
 
-void initializeTimer(void)
-{
-  timer = timerBegin(0, 80, true);
-  timerAttachInterrupt(timer, &on10msecTimer, true);
-  timerAlarmWrite(timer, 10000, true); // 10msec
-  timerAlarmEnable(timer);
+void initializeTimer(void) {
+  timer = timerBegin(1000000);
+  timerAttachInterrupt(timer, &on10msecTimer);
+  timerAlarm(timer, 10000, true, 0);  // 10msec
 }
 
-void set_can_command(uint8_t command_no)
-{
+void set_can_command(uint8_t command_no) {
   uint8_t command_length = can_command_list[command_no][3];
   uint8_t header_command[0xFF];
   uint8_t idx = 0;
-  for (int i = 2; i < command_length; i++)
-  {
+  for (int i = 2; i < command_length; i++) {
     header_command[idx] = can_command_list[command_no][i];
 
-    if (i == 5 && can_command_list[command_no][5] == 0xFF)
-    {
+    if (i == 5 && can_command_list[command_no][5] == 0xFF) {
       appendCRC8CheckSum(header_command, 4);
     }
-    if (i == 8 && can_command_list[command_no][8] == 0xFF)
-    {
+    if (i == 8 && can_command_list[command_no][8] == 0xFF) {
       header_command[idx] = command_counter[command_no] & 0xFF;
     }
-    if (i == 9 && can_command_list[command_no][9] == 0xFF)
-    {
+    if (i == 9 && can_command_list[command_no][9] == 0xFF) {
       header_command[idx] = (command_counter[command_no] >> 8) & 0xFF;
     }
     command_counter[command_no]++;
@@ -578,141 +551,166 @@ void set_can_command(uint8_t command_no)
     idx++;
   }
   appendCRC16CheckSum(header_command, command_length);
-  for (int i = 0; i < command_length; i++)
-  {
+  for (int i = 0; i < command_length; i++) {
     can_command_buffer[can_command_buffer_wp] = header_command[i];
     can_command_buffer_wp++;
     can_command_buffer_wp %= TX_BUFFER_SIZE;
   }
 }
 
-void onReceive(int packetSize)
-{
-
-  if (CAN.packetExtended())
-  {
-    return;
-  }
-
-  if (CAN.packetRtr())
-  {
-    return;
-  }
-
-  CANRxMsg msg;
-  switch (CAN.packetId())
-  {
-  case 0x202:
-    msg.can_id = ID_0x202;
-    break;
-  case 0x203:
-    msg.can_id = ID_0x203;
-    break;
-  case 0x204:
-    msg.can_id = ID_0x204;
-    break;
-  case 0x211:
-    msg.can_id = ID_0x211;
-    break;
-  case 0x212:
-    msg.can_id = ID_0x212;
-    break;
-  case 0x213:
-    msg.can_id = ID_0x213;
-    break;
-  case 0x214:
-    msg.can_id = ID_0x214;
-    break;
-  case 0x215:
-    msg.can_id = ID_0x215;
-    break;
-  case 0x216:
-    msg.can_id = ID_0x216;
-    break;
-  }
-
-  msg.dlc = CAN.packetDlc();
-  for (int i = 0; i < msg.dlc; i++)
-  {
-    while (CAN.available())
-    {
-      msg.data[i] = CAN.read();
-      break;
-    }
-  }
-  rx_msg_buffer[buffer_wp] = msg;
-  buffer_wp++;
-  buffer_wp %= CAN_RX_BUFFER_SIZE;
-}
-
-void error_disp()
-{
+void error_disp() {
   // avatar.setSpeechText("micro-ROS Fail...");
   while (1)
     ;
 }
 
-void setup()
-{
+void can_recv_task(void *args) {
+  while (1) {
+    // Wait for the message to be received
+    twai_message_t message;
+    if (twai_receive(&message, pdMS_TO_TICKS(10000)) == ESP_OK) {
+      // printf("Message received\n");
+    } else {
+      printf("Failed to receive message\n");
+      twai_status_info_t status_info;
+      twai_get_status_info(&status_info);
+      if (status_info.state == TWAI_STATE_BUS_OFF) {
+        if (twai_initiate_recovery() == ESP_OK) {
+          ESP_LOGW(TAG, "twai_initiate_recovery");
+        } else {
+          ESP_LOGE(TAG, "twai_initiate_recovery failure");
+        }
+      }
+      continue;
+    }
+
+    // Process received message
+    if (message.extd) {
+      continue;
+    }
+
+    if (message.rtr) {
+      continue;
+    }
+
+    CANRxMsg msg;
+    switch (message.identifier) {
+      case 0x202:
+        msg.can_id = ID_0x202;
+        break;
+      case 0x203:
+        msg.can_id = ID_0x203;
+        break;
+      case 0x204:
+        msg.can_id = ID_0x204;
+        break;
+      case 0x211:
+        msg.can_id = ID_0x211;
+        break;
+      case 0x212:
+        msg.can_id = ID_0x212;
+        break;
+      case 0x213:
+        msg.can_id = ID_0x213;
+        break;
+      case 0x214:
+        msg.can_id = ID_0x214;
+        break;
+      case 0x215:
+        msg.can_id = ID_0x215;
+        break;
+      case 0x216:
+        msg.can_id = ID_0x216;
+        break;
+    }
+
+    msg.dlc = message.data_length_code;
+    for (int i = 0; i < msg.dlc; i++) {
+      msg.data[i] = message.data[i];
+    }
+    rx_msg_buffer[buffer_wp] = msg;
+    buffer_wp++;
+    buffer_wp %= CAN_RX_BUFFER_SIZE;
+  }
+}
+
+void setup() {
   // put your setup code here, to run once:
+  delay(2000);
 
   // ESP32 Timer
   initializeTimer();
 
   // start the CAN bus at 500 kbps
-  if (!CAN.begin(1000E3))
-  {
-    // header("Starting CAN failed!", BLACK);
-    while (1)
-      ;
-  }
-  volatile uint32_t *pREG_IER = (volatile uint32_t *)0x3ff6b010;
-  *pREG_IER &= ~(uint8_t)0x10;
+  // Initialize configuration structures using macro initializers
+  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_17, GPIO_NUM_16, TWAI_MODE_NORMAL);
+  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
+  twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
-  CAN.onReceive(onReceive);
+  // Install TWAI driver
+  if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
+    printf("Driver installed\n");
+  } else {
+    printf("Failed to install driver\n");
+    return;
+  }
+
+  // Start TWAI driver
+  if (twai_start() == ESP_OK) {
+    printf("Driver started\n");
+  } else {
+    printf("Failed to start driver\n");
+    return;
+  }
+
+  // if (!CAN.begin(1000E3))
+  // {
+  //   // header("Starting CAN failed!", BLACK);
+  //   while (1)
+  //     ;
+  // }
+  // volatile uint32_t *pREG_IER = (volatile uint32_t *)0x3ff6b010;
+  // *pREG_IER &= ~(uint8_t)0x10;
+
+  // CAN.onReceive(onReceive);
 
   // multi task
   xTaskCreatePinnedToCore(Core0a, "Core0a", 8192, NULL, 2, &thp[0], 0);
+  xTaskCreatePinnedToCore(can_recv_task, "can_recv_task", 8192, NULL, 2, &thp[1], 0);
 }
 
-void loop()
-{
+void loop() {
   // put your main code here, to run repeatedly:
-  if (robomasters1_can_timeout) // Timeout
+  if (robomasters1_can_timeout)  // Timeout
   {
     delay(100);
     return;
   }
 
   // Initial Command 10sec after boot
-  if (initial_task_number < 3)
-  {
+  if (initial_task_number < 3) {
     // Initial Task 1
-    if (timer100msec_flag == 1 && initial_task_number == 0)
-    {
+    if (timer100msec_flag == 1 && initial_task_number == 0) {
       initial_task_number = 1;
       timer100msec_flag = 0;
 
       // boot command
-      for (int command_no = 26; command_no < 35; command_no++)
-      {
+      printf("Sending boot command\n");
+      for (int command_no = 26; command_no < 35; command_no++) {
         uint8_t header_command[0xFF];
         uint8_t idx = 0;
         uint8_t command_length = can_command_list[command_no][3];
-        for (int i = 2; i < command_length; i++)
-        {
+        for (int i = 2; i < command_length; i++) {
           header_command[idx] = can_command_list[command_no][i];
 
-          if (i == 5 && can_command_list[command_no][5] == 0xFF)
-          {
+          if (i == 5 && can_command_list[command_no][5] == 0xFF) {
             appendCRC8CheckSum(header_command, 4);
           }
 
           idx++;
         }
         appendCRC16CheckSum(header_command, command_length);
-        for (int i = 0; i < command_length; i++)
-        {
+        for (int i = 0; i < command_length; i++) {
           can_command_buffer[can_command_buffer_wp] = header_command[i];
           can_command_buffer_wp++;
           can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -721,8 +719,7 @@ void loop()
     }
 
     // Initial Task 2
-    if (timer100msec_flag == 1 && initial_task_number == 1)
-    {
+    if (timer100msec_flag == 1 && initial_task_number == 1) {
       initial_task_number = 2;
       timer100msec_flag = 0;
 
@@ -732,28 +729,23 @@ void loop()
         uint8_t header_command[0xFF];
         uint8_t idx = 0;
         uint8_t command_length = can_command_list[command_no][3];
-        for (int i = 2; i < command_length; i++)
-        {
+        for (int i = 2; i < command_length; i++) {
           header_command[idx] = can_command_list[command_no][i];
 
-          if (i == 5 && can_command_list[command_no][5] == 0xFF)
-          {
+          if (i == 5 && can_command_list[command_no][5] == 0xFF) {
             appendCRC8CheckSum(header_command, 4);
           }
-          if (i == 8 && can_command_list[command_no][8] == 0xFF)
-          {
+          if (i == 8 && can_command_list[command_no][8] == 0xFF) {
             header_command[idx] = counter_led & 0xFF;
           }
-          if (i == 9 && can_command_list[command_no][9] == 0xFF)
-          {
+          if (i == 9 && can_command_list[command_no][9] == 0xFF) {
             header_command[idx] = (counter_led >> 8) & 0xFF;
           }
           idx++;
         }
         appendCRC16CheckSum(header_command, command_length);
 
-        for (int i = 0; i < command_length; i++)
-        {
+        for (int i = 0; i < command_length; i++) {
           can_command_buffer[can_command_buffer_wp] = header_command[i];
           can_command_buffer_wp++;
           can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -768,28 +760,23 @@ void loop()
         uint8_t header_command[0xFF];
         uint8_t idx = 0;
         uint8_t command_length = can_command_list[command_no][3];
-        for (int i = 2; i < command_length; i++)
-        {
+        for (int i = 2; i < command_length; i++) {
           header_command[idx] = can_command_list[command_no][i];
 
-          if (i == 5 && can_command_list[command_no][5] == 0xFF)
-          {
+          if (i == 5 && can_command_list[command_no][5] == 0xFF) {
             appendCRC8CheckSum(header_command, 4);
           }
-          if (i == 8 && can_command_list[command_no][8] == 0xFF)
-          {
+          if (i == 8 && can_command_list[command_no][8] == 0xFF) {
             header_command[idx] = counter_mode & 0xFF;
           }
-          if (i == 9 && can_command_list[command_no][9] == 0xFF)
-          {
+          if (i == 9 && can_command_list[command_no][9] == 0xFF) {
             header_command[idx] = (counter_mode >> 8) & 0xFF;
           }
           idx++;
         }
         appendCRC16CheckSum(header_command, command_length);
 
-        for (int i = 0; i < command_length; i++)
-        {
+        for (int i = 0; i < command_length; i++) {
           can_command_buffer[can_command_buffer_wp] = header_command[i];
           can_command_buffer_wp++;
           can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -800,8 +787,7 @@ void loop()
     }
 
     // Initial Task 3
-    if (timer100msec_flag == 1 && initial_task_number == 2)
-    {
+    if (timer100msec_flag == 1 && initial_task_number == 2) {
       initial_task_number = 3;
       timer100msec_flag = 0;
 
@@ -810,20 +796,17 @@ void loop()
       uint8_t header_command[0xFF];
       uint8_t idx = 0;
       uint8_t command_length = can_command_list[command_no][3];
-      for (int i = 2; i < command_length; i++)
-      {
+      for (int i = 2; i < command_length; i++) {
         header_command[idx] = can_command_list[command_no][i];
 
-        if (i == 5 && can_command_list[command_no][5] == 0xFF)
-        {
+        if (i == 5 && can_command_list[command_no][5] == 0xFF) {
           appendCRC8CheckSum(header_command, 4);
         }
 
         idx++;
       }
       appendCRC16CheckSum(header_command, command_length);
-      for (int i = 0; i < command_length; i++)
-      {
+      for (int i = 0; i < command_length; i++) {
         can_command_buffer[can_command_buffer_wp] = header_command[i];
         can_command_buffer_wp++;
         can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -832,14 +815,12 @@ void loop()
   }
 
   // After Initialize Task
-  if (initial_task_number == 3)
-  {
+  if (initial_task_number == 3) {
     // 10msec TASK
-    if (timer10msec_flag)
-    {
+    if (timer10msec_flag) {
       timer10msec_flag = 0;
 
-      if (command_lose == 1) // Lose Command
+      if (command_lose == 1)  // Lose Command
       {
         command_lose = 0;
         // Lose command
@@ -848,20 +829,16 @@ void loop()
         uint8_t header_command[0xFF];
         uint8_t idx = 0;
         uint8_t command_length = can_command_list[command_no][3];
-        for (int i = 2; i < command_length; i++)
-        {
+        for (int i = 2; i < command_length; i++) {
           header_command[idx] = can_command_list[command_no][i];
 
-          if (i == 5 && can_command_list[command_no][5] == 0xFF)
-          {
+          if (i == 5 && can_command_list[command_no][5] == 0xFF) {
             appendCRC8CheckSum(header_command, 4);
           }
-          if (i == 8 && can_command_list[command_no][8] == 0xFF)
-          {
+          if (i == 8 && can_command_list[command_no][8] == 0xFF) {
             header_command[idx] = counter_lose & 0xFF;
           }
-          if (i == 9 && can_command_list[command_no][9] == 0xFF)
-          {
+          if (i == 9 && can_command_list[command_no][9] == 0xFF) {
             header_command[idx] = (counter_lose >> 8) & 0xFF;
           }
 
@@ -869,8 +846,7 @@ void loop()
         }
         appendCRC16CheckSum(header_command, command_length);
 
-        for (int i = 0; i < command_length; i++)
-        {
+        for (int i = 0; i < command_length; i++) {
           can_command_buffer[can_command_buffer_wp] = header_command[i];
           can_command_buffer_wp++;
           can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -879,7 +855,7 @@ void loop()
         counter_lose++;
       }
 
-      if (command_lose == 2) // Recoover Command
+      if (command_lose == 2)  // Recoover Command
       {
         command_lose = 0;
         // Recover command
@@ -888,20 +864,16 @@ void loop()
         uint8_t header_command[0xFF];
         uint8_t idx = 0;
         uint8_t command_length = can_command_list[command_no][3];
-        for (int i = 2; i < command_length; i++)
-        {
+        for (int i = 2; i < command_length; i++) {
           header_command[idx] = can_command_list[command_no][i];
 
-          if (i == 5 && can_command_list[command_no][5] == 0xFF)
-          {
+          if (i == 5 && can_command_list[command_no][5] == 0xFF) {
             appendCRC8CheckSum(header_command, 4);
           }
-          if (i == 8 && can_command_list[command_no][8] == 0xFF)
-          {
+          if (i == 8 && can_command_list[command_no][8] == 0xFF) {
             header_command[idx] = counter_lose & 0xFF;
           }
-          if (i == 9 && can_command_list[command_no][9] == 0xFF)
-          {
+          if (i == 9 && can_command_list[command_no][9] == 0xFF) {
             header_command[idx] = (counter_lose >> 8) & 0xFF;
           }
 
@@ -909,8 +881,7 @@ void loop()
         }
         appendCRC16CheckSum(header_command, command_length);
 
-        for (int i = 0; i < command_length; i++)
-        {
+        for (int i = 0; i < command_length; i++) {
           can_command_buffer[can_command_buffer_wp] = header_command[i];
           can_command_buffer_wp++;
           can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -920,47 +891,38 @@ void loop()
       }
 
       // LED Command
-      if (command_led.enable)
-      {
+      if (command_led.enable) {
         command_led.enable = 0;
         // LED command
-        for (int command_no = 9; command_no < 11; command_no++)
-        {
+        for (int command_no = 9; command_no < 11; command_no++) {
           uint8_t header_command[0xFF];
           uint8_t idx = 0;
           uint8_t command_length = can_command_list[command_no][3];
-          for (int i = 2; i < command_length; i++)
-          {
+          for (int i = 2; i < command_length; i++) {
             header_command[idx] = can_command_list[command_no][i];
 
-            if (i == 5 && can_command_list[command_no][5] == 0xFF)
-            {
+            if (i == 5 && can_command_list[command_no][5] == 0xFF) {
               appendCRC8CheckSum(header_command, 4);
             }
-            if (i == 8 && can_command_list[command_no][8] == 0xFF)
-            {
+            if (i == 8 && can_command_list[command_no][8] == 0xFF) {
               header_command[idx] = counter_led & 0xFF;
             }
-            if (i == 9 && can_command_list[command_no][9] == 0xFF)
-            {
+            if (i == 9 && can_command_list[command_no][9] == 0xFF) {
               header_command[idx] = (counter_led >> 8) & 0xFF;
             }
 
             // RED
-            if (i == 16)
-            {
+            if (i == 16) {
               header_command[idx] = command_led.red;
             }
 
             // GREEN
-            if (i == 17)
-            {
+            if (i == 17) {
               header_command[idx] = command_led.green;
             }
 
             // BLUE
-            if (i == 18)
-            {
+            if (i == 18) {
               header_command[idx] = command_led.blue;
             }
 
@@ -968,8 +930,7 @@ void loop()
           }
           appendCRC16CheckSum(header_command, command_length);
 
-          for (int i = 0; i < command_length; i++)
-          {
+          for (int i = 0; i < command_length; i++) {
             can_command_buffer[can_command_buffer_wp] = header_command[i];
             can_command_buffer_wp++;
             can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -980,30 +941,24 @@ void loop()
       }
 
       // Blaster Command
-      if (command_blaster)
-      {
+      if (command_blaster) {
         command_blaster = 0;
 
         // Blaster
-        for (int command_no = 7; command_no < 9; command_no++)
-        {
+        for (int command_no = 7; command_no < 9; command_no++) {
           uint8_t header_command[0xFF];
           uint8_t idx = 0;
           uint8_t command_length = can_command_list[command_no][3];
-          for (int i = 2; i < command_length; i++)
-          {
+          for (int i = 2; i < command_length; i++) {
             header_command[idx] = can_command_list[command_no][i];
 
-            if (i == 5 && can_command_list[command_no][5] == 0xFF)
-            {
+            if (i == 5 && can_command_list[command_no][5] == 0xFF) {
               appendCRC8CheckSum(header_command, 4);
             }
-            if (i == 8 && can_command_list[command_no][8] == 0xFF)
-            {
+            if (i == 8 && can_command_list[command_no][8] == 0xFF) {
               header_command[idx] = counter_blaster & 0xFF;
             }
-            if (i == 9 && can_command_list[command_no][9] == 0xFF)
-            {
+            if (i == 9 && can_command_list[command_no][9] == 0xFF) {
               header_command[idx] = (counter_blaster >> 8) & 0xFF;
             }
 
@@ -1011,8 +966,7 @@ void loop()
           }
           appendCRC16CheckSum(header_command, command_length);
 
-          for (int i = 0; i < command_length; i++)
-          {
+          for (int i = 0; i < command_length; i++) {
             can_command_buffer[can_command_buffer_wp] = header_command[i];
             can_command_buffer_wp++;
             can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -1023,30 +977,24 @@ void loop()
       }
 
       // Gel Blaster Command
-      if (command_gel_blaster)
-      {
+      if (command_gel_blaster) {
         command_gel_blaster = 0;
 
         // Gel Blaster
-        for (int command_no = 38; command_no < 39; command_no++)
-        {
+        for (int command_no = 38; command_no < 39; command_no++) {
           uint8_t header_command[0xFF];
           uint8_t idx = 0;
           uint8_t command_length = can_command_list[command_no][3];
-          for (int i = 2; i < command_length; i++)
-          {
+          for (int i = 2; i < command_length; i++) {
             header_command[idx] = can_command_list[command_no][i];
 
-            if (i == 5 && can_command_list[command_no][5] == 0xFF)
-            {
+            if (i == 5 && can_command_list[command_no][5] == 0xFF) {
               appendCRC8CheckSum(header_command, 4);
             }
-            if (i == 8 && can_command_list[command_no][8] == 0xFF)
-            {
+            if (i == 8 && can_command_list[command_no][8] == 0xFF) {
               header_command[idx] = counter_gel_blaster & 0xFF;
             }
-            if (i == 9 && can_command_list[command_no][9] == 0xFF)
-            {
+            if (i == 9 && can_command_list[command_no][9] == 0xFF) {
               header_command[idx] = (counter_gel_blaster >> 8) & 0xFF;
             }
 
@@ -1054,8 +1002,7 @@ void loop()
           }
           appendCRC16CheckSum(header_command, command_length);
 
-          for (int i = 0; i < command_length; i++)
-          {
+          for (int i = 0; i < command_length; i++) {
             can_command_buffer[can_command_buffer_wp] = header_command[i];
             can_command_buffer_wp++;
             can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -1076,84 +1023,76 @@ void loop()
         uint16_t linear_x = 1024;
         uint16_t linear_y = 1024;
         int16_t angular_z = 1024;
-        if (command_vel.enable)
-        {
+        if (command_vel.enable) {
           linear_x = 256 * command_vel.twist_linear.x + 1024;
           linear_y = 256 * command_vel.twist_linear.y + 1024;
           angular_z = 0;
-          if (command_control_mode)
-          {
+          if (command_control_mode) {
             angular_z = 256 * command_vel.twist_angular.z + 1024;
           }
         }
 
-        for (int i = 2; i < command_length; i++)
-        {
+        for (int i = 2; i < command_length; i++) {
           header_command[idx] = can_command_list[command_no][i];
 
-          if (i == 5 && can_command_list[command_no][5] == 0xFF)
-          {
+          if (i == 5 && can_command_list[command_no][5] == 0xFF) {
             appendCRC8CheckSum(header_command, 4);
           }
-          if (i == 8 && can_command_list[command_no][8] == 0xFF)
-          {
+          if (i == 8 && can_command_list[command_no][8] == 0xFF) {
             header_command[idx] = command_counter[command_no] & 0xFF;
           }
-          if (i == 9 && can_command_list[command_no][9] == 0xFF)
-          {
+          if (i == 9 && can_command_list[command_no][9] == 0xFF) {
             header_command[idx] = (command_counter[command_no] >> 8) & 0xFF;
           }
           command_counter[i]++;
 
-          switch (i)
-          {
-          case 15:
-            header_command[idx] = can_command_list[command_no][i] & 0xC0;
-            header_command[idx] |= (linear_x >> 5) & 0x3F;
-            break;
-          case 14:
-            header_command[idx] = linear_x << 3;
-            header_command[idx] |= (linear_y >> 8) & 0x07;
-            break;
-          case 13:
-            header_command[idx] = linear_y & 0xFF;
-            break;
-          case 19:
-            header_command[idx] = (angular_z >> 4) & 0xFF; // 0x40;
-            break;
-          case 18:
-            header_command[idx] = (angular_z << 4) | 0x08; // 0x08;
-            break;
-          case 20:
-            header_command[idx] = 0x00;
-            break;
-          case 21:
-            header_command[idx] = 0x02 | ((angular_z << 2) & 0xFF);
-            break;
-          case 22:
-            header_command[idx] = (angular_z >> 6) & 0xFF; // 0x10;
-            break;
-          case 23:
-            header_command[idx] = 0x04;
-            break;
-          case 24:
-            header_command[idx] = 0x0C; // Enable Flag 4:x-y 8:yaw 0x0c
-            break;
-          case 25:
-            header_command[idx] = 0x00;
-            break;
-          case 26:
-            header_command[idx] = 0x04;
-            break;
-          default:
-            break;
+          switch (i) {
+            case 15:
+              header_command[idx] = can_command_list[command_no][i] & 0xC0;
+              header_command[idx] |= (linear_x >> 5) & 0x3F;
+              break;
+            case 14:
+              header_command[idx] = linear_x << 3;
+              header_command[idx] |= (linear_y >> 8) & 0x07;
+              break;
+            case 13:
+              header_command[idx] = linear_y & 0xFF;
+              break;
+            case 19:
+              header_command[idx] = (angular_z >> 4) & 0xFF;  // 0x40;
+              break;
+            case 18:
+              header_command[idx] = (angular_z << 4) | 0x08;  // 0x08;
+              break;
+            case 20:
+              header_command[idx] = 0x00;
+              break;
+            case 21:
+              header_command[idx] = 0x02 | ((angular_z << 2) & 0xFF);
+              break;
+            case 22:
+              header_command[idx] = (angular_z >> 6) & 0xFF;  // 0x10;
+              break;
+            case 23:
+              header_command[idx] = 0x04;
+              break;
+            case 24:
+              header_command[idx] = 0x0C;  // Enable Flag 4:x-y 8:yaw 0x0c
+              break;
+            case 25:
+              header_command[idx] = 0x00;
+              break;
+            case 26:
+              header_command[idx] = 0x04;
+              break;
+            default:
+              break;
           }
 
           idx++;
         }
         appendCRC16CheckSum(header_command, command_length);
-        for (int i = 0; i < command_length; i++)
-        {
+        for (int i = 0; i < command_length; i++) {
           can_command_buffer[can_command_buffer_wp] = header_command[i];
           can_command_buffer_wp++;
           can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -1170,53 +1109,46 @@ void loop()
         // Angular X and Y
         int16_t angular_y = 0;
         int16_t angular_z = 0;
-        if (command_vel.enable)
-        {
+        if (command_vel.enable) {
           angular_y = -1024 * command_vel.twist_angular.y;
           angular_z = -1024 * command_vel.twist_angular.z;
         }
 
-        for (int i = 2; i < command_length; i++)
-        {
+        for (int i = 2; i < command_length; i++) {
           header_command[idx] = can_command_list[command_no][i];
 
-          if (i == 5 && can_command_list[command_no][5] == 0xFF)
-          {
+          if (i == 5 && can_command_list[command_no][5] == 0xFF) {
             appendCRC8CheckSum(header_command, 4);
           }
-          if (i == 8 && can_command_list[command_no][8] == 0xFF)
-          {
+          if (i == 8 && can_command_list[command_no][8] == 0xFF) {
             header_command[idx] = command_counter[command_no] & 0xFF;
           }
-          if (i == 9 && can_command_list[command_no][9] == 0xFF)
-          {
+          if (i == 9 && can_command_list[command_no][9] == 0xFF) {
             header_command[idx] = (command_counter[command_no] >> 8) & 0xFF;
           }
           command_counter[command_no]++;
 
-          switch (i)
-          {
-          case 16:
-            header_command[idx] = (angular_y >> 8) & 0xFF;
-            break;
-          case 15:
-            header_command[idx] = angular_y & 0xFF;
-            break;
-          case 18:
-            header_command[idx] = (angular_z >> 8) & 0xFF;
-            break;
-          case 17:
-            header_command[idx] = angular_z & 0xFF;
-            break;
-          default:
-            break;
+          switch (i) {
+            case 16:
+              header_command[idx] = (angular_y >> 8) & 0xFF;
+              break;
+            case 15:
+              header_command[idx] = angular_y & 0xFF;
+              break;
+            case 18:
+              header_command[idx] = (angular_z >> 8) & 0xFF;
+              break;
+            case 17:
+              header_command[idx] = angular_z & 0xFF;
+              break;
+            default:
+              break;
           }
 
           idx++;
         }
         appendCRC16CheckSum(header_command, command_length);
-        for (int i = 0; i < command_length; i++)
-        {
+        for (int i = 0; i < command_length; i++) {
           can_command_buffer[can_command_buffer_wp] = header_command[i];
           can_command_buffer_wp++;
           can_command_buffer_wp %= TX_BUFFER_SIZE;
@@ -1224,483 +1156,488 @@ void loop()
       }
 
       // Register 10msec Task
-      for (int i = 0; i < COMMAND_LIST_SIZE; i++)
-      {
-        if (can_command_list[i][1] == 1 && i != 5 && i != 4)
-        {
+      for (int i = 0; i < COMMAND_LIST_SIZE; i++) {
+        if (can_command_list[i][1] == 1 && i != 5 && i != 4) {
           set_can_command((uint8_t)i);
         }
       }
     }
 
     // 100msec TASK
-    if (timer100msec_flag)
-    {
+    if (timer100msec_flag) {
       timer100msec_flag = 0;
 
-      for (int i = 0; i < COMMAND_LIST_SIZE; i++)
-      {
-        if (can_command_list[i][1] == 10)
-        {
+      for (int i = 0; i < COMMAND_LIST_SIZE; i++) {
+        if (can_command_list[i][1] == 10) {
           set_can_command((uint8_t)i);
         }
       }
     }
 
     // 1sec TASK
-    if (timer1sec_flag)
-    {
+    if (timer1sec_flag) {
       timer1sec_flag = 0;
 
-      for (int i = 0; i < COMMAND_LIST_SIZE; i++)
-      {
-        if (can_command_list[i][1] == 100)
-        {
+      for (int i = 0; i < COMMAND_LIST_SIZE; i++) {
+        if (can_command_list[i][1] == 100) {
           set_can_command((uint8_t)i);
         }
       }
     }
 
     // 10sec TASK
-    if (timer10sec_flag)
-    {
+    if (timer10sec_flag) {
       timer10sec_flag = 0;
     }
   }
 
   // Transmit CAN Command
-  while (can_command_buffer_rp != can_command_buffer_wp)
-  {
+  while (can_command_buffer_rp != can_command_buffer_wp) {
     uint8_t TxData[8];
     uint8_t dlc = 0;
 
     int can_command_buffer_size = (can_command_buffer_wp - can_command_buffer_rp + TX_BUFFER_SIZE) % TX_BUFFER_SIZE;
-    if (can_command_buffer_size >= 8)
-    {
+    if (can_command_buffer_size >= 8) {
       dlc = 8;
-    }
-    else
-    {
+    } else {
       dlc = can_command_buffer_size;
     }
-    CAN.beginPacket(0x201);
-    for (int i = 0; i < dlc; i++)
-    {
-      CAN.write(can_command_buffer[(can_command_buffer_rp + i) % TX_BUFFER_SIZE]);
+
+    // Configure message to transmit
+    twai_message_t message = {
+      // Message type and format settings
+      .extd = 0,          // Standard vs extended format
+      .rtr = 0,           // Data vs RTR frame
+      .ss = 0,            // Whether the message is single shot (i.e., does not repeat on error)
+      .self = 0,          // Whether the message is a self reception request (loopback)
+      .dlc_non_comp = 0,  // DLC is less than 8
+      // Message ID and payload
+      .identifier = 0x201,
+      .data_length_code = dlc,
+      .data = { 0 },
+    };
+
+    for (int i = 0; i < dlc; i++) {
+      message.data[i] = can_command_buffer[(can_command_buffer_rp + i) % TX_BUFFER_SIZE];
     }
-    // Start Transmission process
-    CAN.endPacket();
+
+    // Queue message for transmission
+    ESP_ERROR_CHECK_WITHOUT_ABORT(twai_transmit(&message, pdMS_TO_TICKS(1000)));
+
+    twai_status_info_t status_info;
+    twai_get_status_info(&status_info);
+    if (status_info.state == TWAI_STATE_BUS_OFF) {
+      if (twai_initiate_recovery() == ESP_OK) {
+        ESP_LOGW(TAG, "twai_initiate_recovery");
+      } else {
+        ESP_LOGE(TAG, "twai_initiate_recovery failure");
+      }
+    }
+
+    // CAN.beginPacket(0x201);
+    // for (int i = 0; i < dlc; i++) {
+    //   CAN.write(can_command_buffer[(can_command_buffer_rp + i) % TX_BUFFER_SIZE]);
+    // }
+    // // Start Transmission process
+    // CAN.endPacket();
     can_command_buffer_rp += dlc;
     can_command_buffer_rp %= TX_BUFFER_SIZE;
   }
 
   // Receive from RoboMaster S1
-  while (buffer_rp != buffer_wp)
-  {
+  while (buffer_rp != buffer_wp) {
     CANRxMsg msg;
     msg = rx_msg_buffer[buffer_rp];
     int ret = parseCanData(msg.can_id, msg.data, msg.dlc, received_data, &received_data_size);
     buffer_rp++;
     buffer_rp %= CAN_RX_BUFFER_SIZE;
-    if (ret)
-    {
+    if (ret) {
       robomasters1_can_timeout_count = ROBOMASTER_S1_CAN_TIMEOUT;
-      switch (msg.can_id)
-      {
+      switch (msg.can_id) {
 
-      // Motion Controller Output Data
-      case ID_0x202:
-      {
-        if (received_data[1] == 0x3D && received_data[4] == 0x03 && received_data[5] == 0x09)
-        {
-          int flag = (received_data[24] >> 7) & 0x01;
-          base_odom_yaw = ((((uint16_t)received_data[24]) << 8) | (((uint16_t)received_data[23]) << 0));
-          if (flag == 0) // minus
+        // Motion Controller Output Data
+        case ID_0x202:
           {
-            int shift = (0x86 - ((received_data[24] << 1) | (received_data[23] >> 7)));
-            base_odom_yaw = ((1 << 7) | received_data[23]) >> shift;
-            base_odom_yaw *= -1;
+            if (received_data[1] == 0x3D && received_data[4] == 0x03 && received_data[5] == 0x09) {
+              int flag = (received_data[24] >> 7) & 0x01;
+              base_odom_yaw = ((((uint16_t)received_data[24]) << 8) | (((uint16_t)received_data[23]) << 0));
+              if (flag == 0)  // minus
+              {
+                int shift = (0x86 - ((received_data[24] << 1) | (received_data[23] >> 7)));
+                base_odom_yaw = ((1 << 7) | received_data[23]) >> shift;
+                base_odom_yaw *= -1;
+              } else  // plus
+              {
+                int shift = (0x186 - ((received_data[24] << 1) | (received_data[23] >> 7)));
+                base_odom_yaw = ((1 << 7) | received_data[23]) >> shift;
+              }
+              if (received_data[24] == 0 && received_data[23] == 0) {
+                base_odom_yaw = 0;
+              }
+
+              // unknown angle filtered value
+              float_uint8 base_odom_yaw_union[5];
+              base_odom_yaw_union[0].uint8_data[0] = received_data[35];
+              base_odom_yaw_union[0].uint8_data[1] = received_data[36];
+              base_odom_yaw_union[0].uint8_data[2] = received_data[37];
+              base_odom_yaw_union[0].uint8_data[3] = received_data[38];
+              base_odom_yaw_union[1].uint8_data[0] = received_data[39];
+              base_odom_yaw_union[1].uint8_data[1] = received_data[40];
+              base_odom_yaw_union[1].uint8_data[2] = received_data[41];
+              base_odom_yaw_union[1].uint8_data[3] = received_data[42];
+              base_odom_yaw_union[2].uint8_data[0] = received_data[43];
+              base_odom_yaw_union[2].uint8_data[1] = received_data[44];
+              base_odom_yaw_union[2].uint8_data[2] = received_data[45];
+              base_odom_yaw_union[2].uint8_data[3] = received_data[46];
+              base_odom_yaw_union[3].uint8_data[0] = received_data[47];
+              base_odom_yaw_union[3].uint8_data[1] = received_data[48];
+              base_odom_yaw_union[3].uint8_data[2] = received_data[49];
+              base_odom_yaw_union[3].uint8_data[3] = received_data[50];
+              base_odom_yaw_union[4].uint8_data[0] = received_data[51];
+              base_odom_yaw_union[4].uint8_data[1] = received_data[52];
+              base_odom_yaw_union[4].uint8_data[2] = received_data[53];
+              base_odom_yaw_union[4].uint8_data[3] = received_data[54];
+              filtered_vel_x1 = base_odom_yaw_union[0].float_data;
+              filtered_vel_y1 = base_odom_yaw_union[1].float_data;
+              unknown_data = base_odom_yaw_union[2].float_data;
+              filtered_vel_x2 = base_odom_yaw_union[3].float_data;
+              filtered_vel_y1 = base_odom_yaw_union[4].float_data;
+
+              update_flag_chassis1 = 1;
+            }
+
+            if (received_data[1] == 0x31 && received_data[4] == 0x03 && received_data[5] == 0x04) {
+              // ~20 is unknown counter and state
+              float_uint8 quaternion_union[4];
+              quaternion_union[0].uint8_data[0] = received_data[21];
+              quaternion_union[0].uint8_data[1] = received_data[22];
+              quaternion_union[0].uint8_data[2] = received_data[23];
+              quaternion_union[0].uint8_data[3] = received_data[24];
+              quaternion_union[1].uint8_data[0] = received_data[25];
+              quaternion_union[1].uint8_data[1] = received_data[26];
+              quaternion_union[1].uint8_data[2] = received_data[27];
+              quaternion_union[1].uint8_data[3] = received_data[28];
+              quaternion_union[2].uint8_data[0] = received_data[29];
+              quaternion_union[2].uint8_data[1] = received_data[30];
+              quaternion_union[2].uint8_data[2] = received_data[31];
+              quaternion_union[2].uint8_data[3] = received_data[32];
+              quaternion_union[3].uint8_data[0] = received_data[33];
+              quaternion_union[3].uint8_data[1] = received_data[34];
+              quaternion_union[3].uint8_data[2] = received_data[35];
+              quaternion_union[3].uint8_data[3] = received_data[36];
+              base_pose_quaternion.w = quaternion_union[0].float_data;
+              base_pose_quaternion.x = quaternion_union[1].float_data;
+              base_pose_quaternion.y = quaternion_union[2].float_data;
+              base_pose_quaternion.z = quaternion_union[3].float_data;
+
+              uint16_t uint16_data = received_data[38];
+              uint16_data = (uint16_data << 8) | received_data[37];
+              voltage = (int16_t)uint16_data;
+
+              uint16_data = received_data[40];
+              uint16_data = (uint16_data << 8) | received_data[39];
+              temperature = (int16_t)uint16_data;
+
+              uint32_t uint32_data = received_data[44];
+              uint32_data = (uint32_data << 8) | received_data[43];
+              uint32_data = (uint32_data << 8) | received_data[42];
+              uint32_data = (uint32_data << 8) | received_data[41];
+              current = -(int32_t)uint32_data;
+
+              battery_soc = received_data[45];
+              update_flag_chassis2 = 1;
+            }
+
+            // Counter
+            if (received_data[1] == 0x39 && received_data[4] == 0x03 && received_data[5] == 0x0A) {
+              uint32_t counter = 0;
+              counter = (received_data[14] & 0x0F) * 10000;
+              counter += (received_data[15] & 0x0F) * 1000;
+              counter += (received_data[16] & 0x0F) * 100;
+              counter += (received_data[17] & 0x0F) * 10;
+              counter += (received_data[18] & 0x0F) * 1;
+            }
+
+            // Odometry Lab Mode Data
+            if (received_data[1] == 0x6F && received_data[4] == 0x03 && received_data[5] == 0x09) {
+              // Odom in Lab mode
+              uint32_t data;
+              int32_t int_data;
+              uint16_t data16;
+              int16_t int_data16;
+
+              data = received_data[16];
+              data = (data << 8) | received_data[15];
+              data = (data << 8) | received_data[14];
+              data = (data << 8) | received_data[13];
+              odom_counter = (uint32_t)data;
+
+              data = received_data[20];
+              data = (data << 8) | received_data[19];
+              data = (data << 8) | received_data[18];
+              data = (data << 8) | received_data[17];
+              odom_counter2 = (uint32_t)data;
+
+              // Wheel Angular Velocity
+              // Unit is RPM
+              data16 = received_data[22];
+              data16 = (data16 << 8) | received_data[21];
+              wheel_angular_velocity[0] = (int16_t)data16;
+
+              data16 = received_data[24];
+              data16 = (data16 << 8) | received_data[23];
+              wheel_angular_velocity[1] = (int16_t)data16;
+
+              data16 = received_data[26];
+              data16 = (data16 << 8) | received_data[25];
+              wheel_angular_velocity[2] = (int16_t)data16;
+
+              data16 = received_data[28];
+              data16 = (data16 << 8) | received_data[27];
+              wheel_angular_velocity[3] = (int16_t)data16;
+
+              // wheel position
+              data16 = received_data[30];
+              data16 = (data16 << 8) | received_data[29];
+              data16 = data16 << 1;
+              int_data16 = (int16_t)data16;
+              wheel_angle[0] = int_data16 / 32767.0 * 180.0;
+
+              data16 = received_data[32];
+              data16 = (data16 << 8) | received_data[31];
+              data16 = data16 << 1;
+              int_data16 = (int16_t)data16;
+              wheel_angle[1] = int_data16 / 32767.0 * 180.0;
+
+              data16 = received_data[34];
+              data16 = (data16 << 8) | received_data[33];
+              data16 = data16 << 1;
+              int_data16 = (int16_t)data16;
+              wheel_angle[2] = int_data16 / 32767.0 * 180.0;
+
+              data16 = received_data[36];
+              data16 = (data16 << 8) | received_data[35];
+              data16 = data16 << 1;
+              int_data16 = (int16_t)data16;
+              wheel_angle[3] = int_data16 / 32767.0 * 180.0;
+
+              m_bus_update_count[4];
+              // wheel update count
+              data = received_data[40];
+              data = (data << 8) | received_data[39];
+              data = (data << 8) | received_data[38];
+              data = (data << 8) | received_data[37];
+              m_bus_update_count[0] = (uint32_t)data;
+
+              data = received_data[44];
+              data = (data << 8) | received_data[43];
+              data = (data << 8) | received_data[42];
+              data = (data << 8) | received_data[41];
+              m_bus_update_count[1] = (uint32_t)data;
+
+              data = received_data[48];
+              data = (data << 8) | received_data[47];
+              data = (data << 8) | received_data[46];
+              data = (data << 8) | received_data[45];
+              m_bus_update_count[2] = (uint32_t)data;
+
+              data = received_data[52];
+              data = (data << 8) | received_data[51];
+              data = (data << 8) | received_data[50];
+              data = (data << 8) | received_data[49];
+              m_bus_update_count[3] = (uint32_t)data;
+
+              // IMU Data
+              float_uint8 union_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4];
+              union_data.uint8_data[1] = received_data[54 + 4];
+              union_data.uint8_data[2] = received_data[55 + 4];
+              union_data.uint8_data[3] = received_data[56 + 4];
+              mag_x = union_data.float_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 2];
+              union_data.uint8_data[1] = received_data[54 + 4 * 2];
+              union_data.uint8_data[2] = received_data[55 + 4 * 2];
+              union_data.uint8_data[3] = received_data[56 + 4 * 2];
+              mag_y = union_data.float_data;
+
+              // mag_z is blank
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 4];
+              union_data.uint8_data[1] = received_data[54 + 4 * 4];
+              union_data.uint8_data[2] = received_data[55 + 4 * 4];
+              union_data.uint8_data[3] = received_data[56 + 4 * 4];
+              g_x = union_data.float_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 5];
+              union_data.uint8_data[1] = received_data[54 + 4 * 5];
+              union_data.uint8_data[2] = received_data[55 + 4 * 5];
+              union_data.uint8_data[3] = received_data[56 + 4 * 5];
+              g_y = union_data.float_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 6];
+              union_data.uint8_data[1] = received_data[54 + 4 * 6];
+              union_data.uint8_data[2] = received_data[55 + 4 * 6];
+              union_data.uint8_data[3] = received_data[56 + 4 * 6];
+              g_z = union_data.float_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 7];
+              union_data.uint8_data[1] = received_data[54 + 4 * 7];
+              union_data.uint8_data[2] = received_data[55 + 4 * 7];
+              union_data.uint8_data[3] = received_data[56 + 4 * 7];
+              gyro_x = union_data.float_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 8];
+              union_data.uint8_data[1] = received_data[54 + 4 * 8];
+              union_data.uint8_data[2] = received_data[55 + 4 * 8];
+              union_data.uint8_data[3] = received_data[56 + 4 * 8];
+              gyro_y = union_data.float_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 9];
+              union_data.uint8_data[1] = received_data[54 + 4 * 9];
+              union_data.uint8_data[2] = received_data[55 + 4 * 9];
+              union_data.uint8_data[3] = received_data[56 + 4 * 9];
+              gyro_z = union_data.float_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 11];
+              union_data.uint8_data[1] = received_data[54 + 4 * 11];
+              union_data.uint8_data[2] = received_data[55 + 4 * 11];
+              union_data.uint8_data[3] = received_data[56 + 4 * 11];
+              yaw = union_data.float_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 12];
+              union_data.uint8_data[1] = received_data[54 + 4 * 12];
+              union_data.uint8_data[2] = received_data[55 + 4 * 12];
+              union_data.uint8_data[3] = received_data[56 + 4 * 12];
+              pitch = union_data.float_data;
+
+              union_data.uint8_data[0] = received_data[53 + 4 * 13];
+              union_data.uint8_data[1] = received_data[54 + 4 * 13];
+              union_data.uint8_data[2] = received_data[55 + 4 * 13];
+              union_data.uint8_data[3] = received_data[56 + 4 * 13];
+              roll = union_data.float_data;
+              update_flag_chassis3 = 1;
+            }
+
+            break;
           }
-          else // plus
+
+        // Gimbal Output Data
+        case ID_0x203:  // 0x203
           {
-            int shift = (0x186 - ((received_data[24] << 1) | (received_data[23] >> 7)));
-            base_odom_yaw = ((1 << 7) | received_data[23]) >> shift;
+            // From Gimbal
+            if (received_data[1] == 0x11 && received_data[4] == 0x04 && received_data[5] == 0x03) {
+              // Pan Angle
+              uint16_t data = received_data[12];
+              data = (data << 8) | received_data[11];
+              gimbal_base_pan_angle = -(int16_t)(data) / 10.0 * 3.141592 / 180;
+              data = received_data[14];
+              data = (data << 8) | received_data[13];
+              gimbal_map_pan_angle = -(int16_t)(data) / 100.0 * 3.141592 / 180;
+              gimbal_receive_state |= 0x01;
+            }
+            if (received_data[1] == 0x16 && received_data[4] == 0x04 && received_data[5] == 0x09) {
+              // Tilt Angle
+              uint32_t data = received_data[14];
+              data = (data << 8) | received_data[13];
+              data = (data << 8) | received_data[12];
+              data = (data << 8) | received_data[11];
+              gimbal_map_tilt_angle = (-(int32_t)(data) / 65536.0 / 10 - 7.6) * 3.141592 / 180;
+              data = received_data[18];
+              data = (data << 8) | received_data[17];
+              data = (data << 8) | received_data[16];
+              data = (data << 8) | received_data[15];
+              gimbal_base_tilt_angle = (-(int32_t)(data) / 65536.0 / 10 - 7.6) * 3.141592 / 180;
+              gimbal_receive_state |= 0x02;
+              // printf("%lf, %lf\n", gimbal_map_tilt_angle_, gimbal_base_tilt_angle_);
+            }
+            if (gimbal_receive_state == 0x03) {
+              gimbal_receive_state = 0;
+              update_flag_gimbal = 1;
+            }
+            break;
           }
-          if (received_data[24] == 0 && received_data[23] == 0)
+        case ID_0x204:  // 0x204
           {
-            base_odom_yaw = 0;
+            if (received_data[4] == 0x17 && received_data[5] == 0x09) {
+            }
+            break;
           }
+        case ID_0x211:  // BACK SENSOR
+          {
+            if (received_data[4] == 0x38 && received_data[5] == 0x09)  // or 1D
+            {
+              // PS4.setRumble(100, 200);
+              //  M5.Lcd.printf("0x%02X\n",received_data[5]);
 
-          // unknown angle filtered value
-          float_uint8 base_odom_yaw_union[5];
-          base_odom_yaw_union[0].uint8_data[0] = received_data[35];
-          base_odom_yaw_union[0].uint8_data[1] = received_data[36];
-          base_odom_yaw_union[0].uint8_data[2] = received_data[37];
-          base_odom_yaw_union[0].uint8_data[3] = received_data[38];
-          base_odom_yaw_union[1].uint8_data[0] = received_data[39];
-          base_odom_yaw_union[1].uint8_data[1] = received_data[40];
-          base_odom_yaw_union[1].uint8_data[2] = received_data[41];
-          base_odom_yaw_union[1].uint8_data[3] = received_data[42];
-          base_odom_yaw_union[2].uint8_data[0] = received_data[43];
-          base_odom_yaw_union[2].uint8_data[1] = received_data[44];
-          base_odom_yaw_union[2].uint8_data[2] = received_data[45];
-          base_odom_yaw_union[2].uint8_data[3] = received_data[46];
-          base_odom_yaw_union[3].uint8_data[0] = received_data[47];
-          base_odom_yaw_union[3].uint8_data[1] = received_data[48];
-          base_odom_yaw_union[3].uint8_data[2] = received_data[49];
-          base_odom_yaw_union[3].uint8_data[3] = received_data[50];
-          base_odom_yaw_union[4].uint8_data[0] = received_data[51];
-          base_odom_yaw_union[4].uint8_data[1] = received_data[52];
-          base_odom_yaw_union[4].uint8_data[2] = received_data[53];
-          base_odom_yaw_union[4].uint8_data[3] = received_data[54];
-          filtered_vel_x1 = base_odom_yaw_union[0].float_data;
-          filtered_vel_y1 = base_odom_yaw_union[1].float_data;
-          unknown_data = base_odom_yaw_union[2].float_data;
-          filtered_vel_x2 = base_odom_yaw_union[3].float_data;
-          filtered_vel_y1 = base_odom_yaw_union[4].float_data;
+              // Sends data set in the above three instructions to the controller
+              // PS4.sendToController();
+            }
+            break;
+          }
+        case ID_0x212:  // FRONT SENSOR
+          {
+            if (received_data[4] == 0x58 && received_data[5] == 0x09)  // or 1D
+            {
+              // PS4.setRumble(100, 200);
+              // M5.Lcd.printf("0x%02X\n",received_data[5]);
 
-          update_flag_chassis1 = 1;
-        }
+              // Sends data set in the above three instructions to the controller
+              // PS4.sendToController();
+            }
+            break;
+          }
+        case ID_0x213:  // LEFT SENSOR
+          {
+            if (received_data[4] == 0x78 && received_data[5] == 0x09)  // or 1D
+            {
+              // PS4.setRumble(100, 200);
+              // M5.Lcd.printf("0x%02X\n",received_data[5]);
 
-        if (received_data[1] == 0x31 && received_data[4] == 0x03 && received_data[5] == 0x04)
-        {
-          // ~20 is unknown counter and state
-          float_uint8 quaternion_union[4];
-          quaternion_union[0].uint8_data[0] = received_data[21];
-          quaternion_union[0].uint8_data[1] = received_data[22];
-          quaternion_union[0].uint8_data[2] = received_data[23];
-          quaternion_union[0].uint8_data[3] = received_data[24];
-          quaternion_union[1].uint8_data[0] = received_data[25];
-          quaternion_union[1].uint8_data[1] = received_data[26];
-          quaternion_union[1].uint8_data[2] = received_data[27];
-          quaternion_union[1].uint8_data[3] = received_data[28];
-          quaternion_union[2].uint8_data[0] = received_data[29];
-          quaternion_union[2].uint8_data[1] = received_data[30];
-          quaternion_union[2].uint8_data[2] = received_data[31];
-          quaternion_union[2].uint8_data[3] = received_data[32];
-          quaternion_union[3].uint8_data[0] = received_data[33];
-          quaternion_union[3].uint8_data[1] = received_data[34];
-          quaternion_union[3].uint8_data[2] = received_data[35];
-          quaternion_union[3].uint8_data[3] = received_data[36];
-          base_pose_quaternion.w = quaternion_union[0].float_data;
-          base_pose_quaternion.x = quaternion_union[1].float_data;
-          base_pose_quaternion.y = quaternion_union[2].float_data;
-          base_pose_quaternion.z = quaternion_union[3].float_data;
+              // Sends data set in the above three instructions to the controller
+              // PS4.sendToController();
+            }
+            break;
+          }
+        case ID_0x214:  // RIGHT SENSOR
+          {
+            if (received_data[4] == 0x98 && received_data[5] == 0x09)  // or 1D
+            {
+              // PS4.setRumble(100, 200);
+              // M5.Lcd.printf("0x%02X\n",received_data[5]);
 
-          uint16_t uint16_data = received_data[38];
-          uint16_data = (uint16_data << 8) | received_data[37];
-          voltage = (int16_t)uint16_data;
+              // Sends data set in the above three instructions to the controller
+              // PS4.sendToController();
+            }
+            break;
+          }
+        case ID_0x215:  // GIMBAL SENSOR LEFT
+          {
+            if (received_data[4] == 0xB8 && received_data[5] == 0x09)  // or 1D
+            {
+              // PS4.setRumble(100, 200);
+              // M5.Lcd.printf("0x%02X\n",received_data[5]);
 
-          uint16_data = received_data[40];
-          uint16_data = (uint16_data << 8) | received_data[39];
-          temperature = (int16_t)uint16_data;
+              // Sends data set in the above three instructions to the controller
+              // PS4.sendToController();
+            }
+            break;
+          }
+        case ID_0x216:  // GIMBAL SENSOR RIGHT
+          {
+            if (received_data[4] == 0xD8 && received_data[5] == 0x09)  // or 1D
+            {
+              // PS4.setRumble(100, 200);
+              // M5.Lcd.printf("0x%02X\n",received_data[5]);
 
-          uint32_t uint32_data = received_data[44];
-          uint32_data = (uint32_data << 8) | received_data[43];
-          uint32_data = (uint32_data << 8) | received_data[42];
-          uint32_data = (uint32_data << 8) | received_data[41];
-          current = -(int32_t)uint32_data;
-
-          battery_soc = received_data[45];
-          update_flag_chassis2 = 1;
-        }
-
-        // Counter
-        if (received_data[1] == 0x39 && received_data[4] == 0x03 && received_data[5] == 0x0A)
-        {
-          uint32_t counter = 0;
-          counter = (received_data[14] & 0x0F) * 10000;
-          counter += (received_data[15] & 0x0F) * 1000;
-          counter += (received_data[16] & 0x0F) * 100;
-          counter += (received_data[17] & 0x0F) * 10;
-          counter += (received_data[18] & 0x0F) * 1;
-        }
-
-        // Odometry Lab Mode Data
-        if (received_data[1] == 0x6F && received_data[4] == 0x03 && received_data[5] == 0x09)
-        {
-          // Odom in Lab mode
-          uint32_t data;
-          int32_t int_data;
-          uint16_t data16;
-          int16_t int_data16;
-
-          data = received_data[16];
-          data = (data << 8) | received_data[15];
-          data = (data << 8) | received_data[14];
-          data = (data << 8) | received_data[13];
-          odom_counter = (uint32_t)data;
-
-          data = received_data[20];
-          data = (data << 8) | received_data[19];
-          data = (data << 8) | received_data[18];
-          data = (data << 8) | received_data[17];
-          odom_counter2 = (uint32_t)data;
-
-          // Wheel Angular Velocity
-          // Unit is RPM
-          data16 = received_data[22];
-          data16 = (data16 << 8) | received_data[21];
-          wheel_angular_velocity[0] = (int16_t)data16;
-
-          data16 = received_data[24];
-          data16 = (data16 << 8) | received_data[23];
-          wheel_angular_velocity[1] = (int16_t)data16;
-
-          data16 = received_data[26];
-          data16 = (data16 << 8) | received_data[25];
-          wheel_angular_velocity[2] = (int16_t)data16;
-
-          data16 = received_data[28];
-          data16 = (data16 << 8) | received_data[27];
-          wheel_angular_velocity[3] = (int16_t)data16;
-
-          // wheel position
-          data16 = received_data[30];
-          data16 = (data16 << 8) | received_data[29];
-          data16 = data16 << 1;
-          int_data16 = (int16_t)data16;
-          wheel_angle[0] = int_data16 / 32767.0 * 180.0;
-
-          data16 = received_data[32];
-          data16 = (data16 << 8) | received_data[31];
-          data16 = data16 << 1;
-          int_data16 = (int16_t)data16;
-          wheel_angle[1] = int_data16 / 32767.0 * 180.0;
-
-          data16 = received_data[34];
-          data16 = (data16 << 8) | received_data[33];
-          data16 = data16 << 1;
-          int_data16 = (int16_t)data16;
-          wheel_angle[2] = int_data16 / 32767.0 * 180.0;
-
-          data16 = received_data[36];
-          data16 = (data16 << 8) | received_data[35];
-          data16 = data16 << 1;
-          int_data16 = (int16_t)data16;
-          wheel_angle[3] = int_data16 / 32767.0 * 180.0;
-
-          m_bus_update_count[4];
-          // wheel update count
-          data = received_data[40];
-          data = (data << 8) | received_data[39];
-          data = (data << 8) | received_data[38];
-          data = (data << 8) | received_data[37];
-          m_bus_update_count[0] = (uint32_t)data;
-
-          data = received_data[44];
-          data = (data << 8) | received_data[43];
-          data = (data << 8) | received_data[42];
-          data = (data << 8) | received_data[41];
-          m_bus_update_count[1] = (uint32_t)data;
-
-          data = received_data[48];
-          data = (data << 8) | received_data[47];
-          data = (data << 8) | received_data[46];
-          data = (data << 8) | received_data[45];
-          m_bus_update_count[2] = (uint32_t)data;
-
-          data = received_data[52];
-          data = (data << 8) | received_data[51];
-          data = (data << 8) | received_data[50];
-          data = (data << 8) | received_data[49];
-          m_bus_update_count[3] = (uint32_t)data;
-
-          // IMU Data
-          float_uint8 union_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4];
-          union_data.uint8_data[1] = received_data[54 + 4];
-          union_data.uint8_data[2] = received_data[55 + 4];
-          union_data.uint8_data[3] = received_data[56 + 4];
-          mag_x = union_data.float_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 2];
-          union_data.uint8_data[1] = received_data[54 + 4 * 2];
-          union_data.uint8_data[2] = received_data[55 + 4 * 2];
-          union_data.uint8_data[3] = received_data[56 + 4 * 2];
-          mag_y = union_data.float_data;
-
-          // mag_z is blank
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 4];
-          union_data.uint8_data[1] = received_data[54 + 4 * 4];
-          union_data.uint8_data[2] = received_data[55 + 4 * 4];
-          union_data.uint8_data[3] = received_data[56 + 4 * 4];
-          g_x = union_data.float_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 5];
-          union_data.uint8_data[1] = received_data[54 + 4 * 5];
-          union_data.uint8_data[2] = received_data[55 + 4 * 5];
-          union_data.uint8_data[3] = received_data[56 + 4 * 5];
-          g_y = union_data.float_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 6];
-          union_data.uint8_data[1] = received_data[54 + 4 * 6];
-          union_data.uint8_data[2] = received_data[55 + 4 * 6];
-          union_data.uint8_data[3] = received_data[56 + 4 * 6];
-          g_z = union_data.float_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 7];
-          union_data.uint8_data[1] = received_data[54 + 4 * 7];
-          union_data.uint8_data[2] = received_data[55 + 4 * 7];
-          union_data.uint8_data[3] = received_data[56 + 4 * 7];
-          gyro_x = union_data.float_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 8];
-          union_data.uint8_data[1] = received_data[54 + 4 * 8];
-          union_data.uint8_data[2] = received_data[55 + 4 * 8];
-          union_data.uint8_data[3] = received_data[56 + 4 * 8];
-          gyro_y = union_data.float_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 9];
-          union_data.uint8_data[1] = received_data[54 + 4 * 9];
-          union_data.uint8_data[2] = received_data[55 + 4 * 9];
-          union_data.uint8_data[3] = received_data[56 + 4 * 9];
-          gyro_z = union_data.float_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 11];
-          union_data.uint8_data[1] = received_data[54 + 4 * 11];
-          union_data.uint8_data[2] = received_data[55 + 4 * 11];
-          union_data.uint8_data[3] = received_data[56 + 4 * 11];
-          yaw = union_data.float_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 12];
-          union_data.uint8_data[1] = received_data[54 + 4 * 12];
-          union_data.uint8_data[2] = received_data[55 + 4 * 12];
-          union_data.uint8_data[3] = received_data[56 + 4 * 12];
-          pitch = union_data.float_data;
-
-          union_data.uint8_data[0] = received_data[53 + 4 * 13];
-          union_data.uint8_data[1] = received_data[54 + 4 * 13];
-          union_data.uint8_data[2] = received_data[55 + 4 * 13];
-          union_data.uint8_data[3] = received_data[56 + 4 * 13];
-          roll = union_data.float_data;
-          update_flag_chassis3 = 1;
-        }
-
-        break;
-      }
-
-      // Gimbal Output Data
-      case ID_0x203: // 0x203
-      {
-        // From Gimbal
-        if (received_data[1] == 0x11 && received_data[4] == 0x04 && received_data[5] == 0x03)
-        {
-          // Pan Angle
-          uint16_t data = received_data[12];
-          data = (data << 8) | received_data[11];
-          gimbal_base_pan_angle = -(int16_t)(data) / 10.0 * 3.141592 / 180;
-          data = received_data[14];
-          data = (data << 8) | received_data[13];
-          gimbal_map_pan_angle = -(int16_t)(data) / 100.0 * 3.141592 / 180;
-          gimbal_receive_state |= 0x01;
-        }
-        if (received_data[1] == 0x16 && received_data[4] == 0x04 && received_data[5] == 0x09)
-        {
-          // Tilt Angle
-          uint32_t data = received_data[14];
-          data = (data << 8) | received_data[13];
-          data = (data << 8) | received_data[12];
-          data = (data << 8) | received_data[11];
-          gimbal_map_tilt_angle = (-(int32_t)(data) / 65536.0 / 10 - 7.6) * 3.141592 / 180;
-          data = received_data[18];
-          data = (data << 8) | received_data[17];
-          data = (data << 8) | received_data[16];
-          data = (data << 8) | received_data[15];
-          gimbal_base_tilt_angle = (-(int32_t)(data) / 65536.0 / 10 - 7.6) * 3.141592 / 180;
-          gimbal_receive_state |= 0x02;
-          // printf("%lf, %lf\n", gimbal_map_tilt_angle_, gimbal_base_tilt_angle_);
-        }
-        if (gimbal_receive_state == 0x03)
-        {
-          gimbal_receive_state = 0;
-          update_flag_gimbal = 1;
-        }
-        break;
-      }
-      case ID_0x204: // 0x204
-      {
-        if (received_data[4] == 0x17 && received_data[5] == 0x09)
-        {
-        }
-        break;
-      }
-      case ID_0x211: // BACK SENSOR
-      {
-        if (received_data[4] == 0x38 && received_data[5] == 0x09) // or 1D
-        {
-          // PS4.setRumble(100, 200);
-          //  M5.Lcd.printf("0x%02X\n",received_data[5]);
-
-          // Sends data set in the above three instructions to the controller
-          // PS4.sendToController();
-        }
-        break;
-      }
-      case ID_0x212: // FRONT SENSOR
-      {
-        if (received_data[4] == 0x58 && received_data[5] == 0x09) // or 1D
-        {
-          // PS4.setRumble(100, 200);
-          // M5.Lcd.printf("0x%02X\n",received_data[5]);
-
-          // Sends data set in the above three instructions to the controller
-          // PS4.sendToController();
-        }
-        break;
-      }
-      case ID_0x213: // LEFT SENSOR
-      {
-        if (received_data[4] == 0x78 && received_data[5] == 0x09) // or 1D
-        {
-          // PS4.setRumble(100, 200);
-          // M5.Lcd.printf("0x%02X\n",received_data[5]);
-
-          // Sends data set in the above three instructions to the controller
-          // PS4.sendToController();
-        }
-        break;
-      }
-      case ID_0x214: // RIGHT SENSOR
-      {
-        if (received_data[4] == 0x98 && received_data[5] == 0x09) // or 1D
-        {
-          // PS4.setRumble(100, 200);
-          // M5.Lcd.printf("0x%02X\n",received_data[5]);
-
-          // Sends data set in the above three instructions to the controller
-          // PS4.sendToController();
-        }
-        break;
-      }
-      case ID_0x215: // GIMBAL SENSOR LEFT
-      {
-        if (received_data[4] == 0xB8 && received_data[5] == 0x09) // or 1D
-        {
-          // PS4.setRumble(100, 200);
-          // M5.Lcd.printf("0x%02X\n",received_data[5]);
-
-          // Sends data set in the above three instructions to the controller
-          // PS4.sendToController();
-        }
-        break;
-      }
-      case ID_0x216: // GIMBAL SENSOR RIGHT
-      {
-        if (received_data[4] == 0xD8 && received_data[5] == 0x09) // or 1D
-        {
-          // PS4.setRumble(100, 200);
-          // M5.Lcd.printf("0x%02X\n",received_data[5]);
-
-          // Sends data set in the above three instructions to the controller
-          // PS4.sendToController();
-        }
-        break;
-      }
-      default:
-        break;
+              // Sends data set in the above three instructions to the controller
+              // PS4.sendToController();
+            }
+            break;
+          }
+        default:
+          break;
       }
 
       break;
